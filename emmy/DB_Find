@@ -1,0 +1,44 @@
+---
+- name: Detect Running Database (Oracle or PostgreSQL)
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check for Oracle process (pmon)
+      ansible.builtin.shell: "pgrep -f 'ora_pmon' || true"
+      register: oracle_proc
+      changed_when: false
+
+    - name: Check for PostgreSQL process
+      ansible.builtin.shell: "pgrep -f 'postgres|postmaster' || true"
+      register: postgres_proc
+      changed_when: false
+
+    - name: Check listening port 1521 (Oracle default)
+      ansible.builtin.shell: "ss -tulpn | grep -q ':1521 ' && echo 'open' || true"
+      register: oracle_port
+      changed_when: false
+
+    - name: Check listening port 5432 (PostgreSQL default)
+      ansible.builtin.shell: "ss -tulpn | grep -q ':5432 ' && echo 'open' || true"
+      register: postgres_port
+      changed_when: false
+
+    - name: Determine active database status
+      ansible.builtin.set_fact:
+        detected_oracle: "{{ (oracle_proc.stdout != '') or (oracle_port.stdout == 'open') }}"
+        detected_postgres: "{{ (postgres_proc.stdout != '') or (postgres_port.stdout == 'open') }}"
+
+    - name: Report running database
+      ansible.builtin.debug:
+        msg: >-
+          {% if detected_oracle and detected_postgres %}
+          Both Oracle and PostgreSQL are running on this host.
+          {% elif detected_oracle %}
+          Oracle Database is running.
+          {% elif detected_postgres %}
+          PostgreSQL Database is running.
+          {% else %}
+          Neither Oracle nor PostgreSQL appears to be running.
+          {% endif %}
